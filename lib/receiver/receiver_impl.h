@@ -1,19 +1,21 @@
 /* -*- c++ -*- */
-/* 
- * Copyright 2014 <+YOU OR YOUR COMPANY+>.
- * 
- * This is free software; you can redistribute it and/or modify
+/*
+ * @file
+ * @author (C) 2009-2017 by Piotr Krysik <ptrkrysik@gmail.com>
+ * @section LICENSE
+ *
+ * Gr-gsm is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3, or (at your option)
  * any later version.
- * 
- * This software is distributed in the hope that it will be useful,
+ *
+ * Gr-gsm is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with this software; see the file COPYING.  If not, write to
+ * along with gr-gsm; see the file COPYING.  If not, write to
  * the Free Software Foundation, Inc., 51 Franklin Street,
  * Boston, MA 02110-1301, USA.
  */
@@ -21,29 +23,34 @@
 #ifndef INCLUDED_GSM_RECEIVER_IMPL_H
 #define INCLUDED_GSM_RECEIVER_IMPL_H
 
-#include <gsm/receiver/receiver.h>
-#include <gsm/gsmtap.h>
+#include <grgsm/receiver/receiver.h>
+#include <grgsm/gsmtap.h>
 #include <gsm_constants.h>
 #include <receiver_config.h>
+#include <vector>
 
 namespace gr {
   namespace gsm {
-
-    typedef std::vector<gr_complex> vector_complex;
-
     class receiver_impl : public receiver
     {
      private:
+        unsigned int d_c0_burst_start;
+        float d_c0_signal_dbm;
+        
         /**@name Configuration of the receiver */
         //@{
         const int d_OSR; ///< oversampling ratio
+        bool d_process_uplink;
         const int d_chan_imp_length; ///< channel impulse length
-        uint16_t d_arfcn;
-        int8_t d_signal_dbm;
+        float d_signal_dbm;
+        std::vector<int> d_tseq_nums; ///< stores training sequence numbers for channels different than C0
+        std::vector<int> d_cell_allocation; ///< stores cell allocation - absolute rf channel numbers (ARFCNs) assigned to the given cell. The variable should at least contain C0 channel number.
         //@}
 
         gr_complex d_sch_training_seq[N_SYNC_BITS]; ///<encoded training sequence of a SCH burst
-        gr_complex d_norm_training_seq[TRAIN_SEQ_NUM][N_TRAIN_BITS]; ///<encoded training sequences of a normal bursts and dummy bursts
+        gr_complex d_norm_training_seq[TRAIN_SEQ_NUM][N_TRAIN_BITS]; ///<encoded training sequences of a normal and dummy burst
+
+        float d_last_time;
 
         /** Counts samples consumed by the receiver
          *
@@ -56,6 +63,7 @@ namespace gr {
 
         /**@name Variables used to store result of the find_fcch_burst fuction */
         //@{
+        bool d_freq_offset_tag_in_fcch; ///< frequency offset tag presence
         unsigned d_fcch_start_pos; ///< position of the first sample of the fcch burst
         float d_freq_offset_setting; ///< frequency offset set in frequency shifter located upstream
         //@}
@@ -80,7 +88,7 @@ namespace gr {
         burst_counter d_burst_nr; ///< frame number and timeslot number
         channel_configuration d_channel_conf; ///< mapping of burst_counter to burst_type
         //@}
-    
+        
         unsigned d_failed_sch; ///< number of subsequent erroneous SCH bursts    
         
         /** Function whis is used to search a FCCH burst and to compute frequency offset before
@@ -101,7 +109,6 @@ namespace gr {
          * @return true if frequency offset was faound
          */
         double compute_freq_offset(const gr_complex * input, unsigned first_sample, unsigned last_sample);
-
         /** Computes angle between two complex numbers
          *
          * @param val1 first complex number
@@ -182,23 +189,32 @@ namespace gr {
         int get_norm_chan_imp_resp(const gr_complex *input, gr_complex * chan_imp_resp, float *corr_max, int bcc);
 
         /**
+         * Sends burst through a C0 (for burst from C0 channel) or Cx (for other bursts) message port
          *
+         * @param burst_nr - frame number of the burst
+         * @param burst_binary - content of the burst
+         * @b_type - type of the burst
          */
-        void send_burst(burst_counter burst_nr, const unsigned char * burst_binary, burst_type b_type);
+        void send_burst(burst_counter burst_nr, const unsigned char * burst_binary, uint8_t burst_type, size_t input_nr);
 
         /**
-         *
+         * Configures burst types in different channels
          */
         void configure_receiver();
-        
 
-        
+        /* State machine handlers */
+        void fcch_search_handler(gr_complex *input, int noutput_items);
+        void sch_search_handler(gr_complex *input, int noutput_items);
+        void synchronized_handler(gr_complex *input,
+            gr_vector_const_void_star &input_items, int noutput_items);
+
      public:
-       receiver_impl(int osr, int arfcn);
+       receiver_impl(int osr, const std::vector<int> &cell_allocation, const std::vector<int> &tseq_nums, bool process_uplink);
       ~receiver_impl();
       
       int work(int noutput_items, gr_vector_const_void_star &input_items, gr_vector_void_star &output_items);
-      virtual void set_arfcn(int arfcn);
+      virtual void set_cell_allocation(const std::vector<int> &cell_allocation);
+      virtual void set_tseq_nums(const std::vector<int> & tseq_nums);
       virtual void reset();
     };
   } // namespace gsm

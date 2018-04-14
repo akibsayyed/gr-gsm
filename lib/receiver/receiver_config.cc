@@ -1,34 +1,31 @@
 /* -*- c++ -*- */
 /*
  * @file
- * @author Piotr Krysik <pkrysik@stud.elka.pw.edu.pl>
+ * @author (C) 2009-2017 by Piotr Krysik <ptrkrysik@gmail.com>
  * @section LICENSE
  *
- * GNU Radio is free software; you can redistribute it and/or modify
+ * Gr-gsm is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3, or (at your option)
  * any later version.
  *
- * GNU Radio is distributed in the hope that it will be useful,
+ * Gr-gsm is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with GNU Radio; see the file COPYING.  If not, write to
+ * along with gr-gsm; see the file COPYING.  If not, write to
  * the Free Software Foundation, Inc., 51 Franklin Street,
  * Boston, MA 02110-1301, USA.
- *
- * @section DESCRIPTION
- * This file contains classes which define  gsm_receiver configuration
- * and the burst_counter which is used to store internal state of the receiver
- * when it's synchronized
  */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
+#include <cmath>
 #include <receiver_config.h>
+
 
 burst_counter & burst_counter::operator++(int)
 {
@@ -49,6 +46,33 @@ burst_counter & burst_counter::operator++(int)
   d_offset_integer = floor(d_offset_fractional);
   d_offset_fractional = d_offset_fractional - d_offset_integer;
   return (*this);
+}
+
+burst_counter burst_counter::subtract_timeslots(unsigned int number_of_timeslots)
+{
+  int timeslot_nr = (int)d_timeslot_nr - (int)number_of_timeslots;
+  int t1,t2,t3;
+  if (timeslot_nr < 0) {
+    timeslot_nr = timeslot_nr + 8;
+
+    t2 = (d_t2+26 - 1) % 26;
+    t3 = (d_t3+51 - 1) % 51;
+
+    if ((d_t2 == 0) && (d_t3 == 0)) {
+      t1 = (d_t1 - 1) % (1 << 11);
+    } else
+    {
+      t1 = d_t1;
+    }
+  }
+  else
+  {
+    t1 = d_t1;
+    t2 = d_t2;
+    t3 = d_t3;
+  }
+  
+  return burst_counter(d_OSR, t1, t2, t3, timeslot_nr);
 }
 
 void burst_counter::set(uint32_t t1, uint32_t t2, uint32_t t3, uint32_t timeslot_nr)
